@@ -1,0 +1,24 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/refresh-content",
+      "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/dim-calendar",
+      "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/agent-signals",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/admin-agent",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/agent-maintenance",
+      "schedule": "0 6 * * *"
+    }
+  ]
+}
