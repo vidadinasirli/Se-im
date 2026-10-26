@@ -147,7 +147,6 @@ export function ChatWidget() {
         <section
           id="chat-widget"
           aria-label="AI söhbət köməkçisi"
-          aria-modal="false"
           className="mb-3 flex h-[min(70vh,620px)] w-[min(calc(100vw-2rem),400px)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
         >
           <header className="flex items-center justify-between gap-3 bg-blue-800 px-4 py-3 text-white">

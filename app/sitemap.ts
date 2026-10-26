@@ -6,7 +6,18 @@ export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-  const pages = ["/", "/imtahan-teqvimi"];
+  const pages = [
+    "/",
+    "/imtahan-teqvimi",
+    "/universitet-ixtisas",
+    "/bal-hesabla",
+    "/hazirliq-plani",
+    "/heftelik-plan",
+    "/haqqimizda",
+    "/elaqe",
+    "/mexfilik-siyaseti",
+    "/istifade-sertleri"
+  ];
   const testPages = Object.keys(questionGroups).map((group) => `/testler/${group}`);
   const agentPages = await prisma.agentPage.findMany({
     where: { noindex: false },

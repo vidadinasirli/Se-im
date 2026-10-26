@@ -32,7 +32,7 @@ export async function reviewPendingChange(formData: FormData) {
 }
 
 // Riyaziyyat suallarını AI ilə yaradır və yoxlanış üçün qaralama kimi saxlayır.
-export async function generateQuestionDraftsAction(_formData: FormData): Promise<void> {
+export async function generateQuestionDraftsAction(): Promise<void> {
   await generateQuestionDrafts();
   revalidatePath("/admin");
 }

@@ -56,6 +56,29 @@ enum AgentLogLevel {
   ERROR
 }
 
+enum TuitionType {
+  FREE
+  PAID
+}
+
+enum NewsletterSubscriberStatus {
+  PENDING
+  CONFIRMED
+}
+
+enum NewsletterDraftStatus {
+  PENDING_REVIEW
+  APPROVED
+  SENT
+  REJECTED
+}
+
+enum NewsletterDeliveryStatus {
+  SENDING
+  SENT
+  FAILED
+}
+
 model ContentItem {
   id         String   @id @default(cuid())
   key        String   @unique
@@ -139,6 +162,75 @@ model ExamEvent {
   createdAt           DateTime      @default(now())
 
   @@index([eventDate])
+}
+
+model UniversitySpecialty {
+  id                    String      @id @default(cuid())
+  universityName        String
+  specialtyName         String
+  city                  String
+  admissionGroup        String
+  admissionSubgroup     String?
+  tuitionType           TuitionType
+  minimumAdmissionScore Float?
+  annualTuition         Int?
+  academicYear          Int
+  sourceUrl             String
+  published             Boolean     @default(false)
+  updatedAt             DateTime    @updatedAt
+  createdAt             DateTime    @default(now())
+
+  @@index([published, academicYear])
+  @@index([city, admissionGroup, tuitionType])
+  @@index([universityName, specialtyName])
+  @@unique([universityName, specialtyName, city, admissionGroup, tuitionType, academicYear])
+}
+
+model NewsletterSubscriber {
+  id                     String                     @id @default(cuid())
+  email                  String                     @unique
+  status                 NewsletterSubscriberStatus @default(PENDING)
+  confirmationTokenHash  String?                    @unique
+  unsubscribeToken       String                     @unique
+  consentAt              DateTime
+  confirmedAt            DateTime?
+  createdAt              DateTime                   @default(now())
+  updatedAt              DateTime                   @updatedAt
+  deliveries             NewsletterDelivery[]
+
+  @@index([status, createdAt])
+}
+
+model NewsletterDraft {
+  id         String                @id @default(cuid())
+  weekKey    String                @unique
+  subject    String
+  preview    String
+  content    String
+  sources    Json
+  status     NewsletterDraftStatus @default(PENDING_REVIEW)
+  createdAt  DateTime              @default(now())
+  reviewedAt DateTime?
+  deliveries NewsletterDelivery[]
+
+  @@index([status, createdAt])
+}
+
+model NewsletterDelivery {
+  id                 String                   @id @default(cuid())
+  draftId            String
+  subscriberId       String
+  status             NewsletterDeliveryStatus @default(SENDING)
+  providerMessageId  String?
+  error               String?
+  sentAt              DateTime?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  draft               NewsletterDraft          @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  subscriber          NewsletterSubscriber     @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+
+  @@unique([draftId, subscriberId])
+  @@index([draftId, status])
 }
 
 model ChatLog {

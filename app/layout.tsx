@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { ChatWidget } from "@/app/chat/chat-widget";
+import { SiteFooter } from "@/app/site-footer";
+import { CookieConsent } from "@/app/cookie-consent";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -26,6 +28,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="az">
       <body>
         {children}
+        <SiteFooter />
+        <CookieConsent />
         <ChatWidget />
       </body>
     </html>

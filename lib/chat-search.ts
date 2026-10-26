@@ -5,14 +5,11 @@ import { prisma } from "@/lib/prisma";
 export type ChatSource = { title: string; body: string; url: string };
 type SearchDocument = ChatSource & { id: string; contentHash: string };
 
-// Yalnız öz saytımızın dərc olunmuş məzmununu FTS5 indeksində saxlayır.
+// SQLite FTS5 və PostgreSQL üçün eyni indeks sənədlərini axtarır.
 export async function searchSiteContent(question: string): Promise<ChatSource[]> {
-  await prisma.$executeRawUnsafe(
-    "CREATE VIRTUAL TABLE IF NOT EXISTS ChatKnowledgeFts USING fts5(id UNINDEXED, title, body, url UNINDEXED, tokenize='unicode61 remove_diacritics 2')"
-  );
-
+  const useSqliteFts = getDatabaseProvider() === "sqlite";
   const documents = await collectDocuments();
-  await syncIndex(documents);
+  await syncIndex(documents, useSqliteFts);
 
   const tokens = question
     .toLocaleLowerCase("az")
@@ -21,18 +18,10 @@ export async function searchSiteContent(question: string): Promise<ChatSource[]>
     .slice(0, 12);
   if (!tokens?.length) return [];
 
-  const matchExpression = [...new Set(tokens)]
-    .map((token) => `"${token.replace(/"/g, '""')}"`)
-    .join(" OR ");
-  const matches = await prisma.$queryRaw<Array<{ id: string; score: number }>>`
-    SELECT id, bm25(ChatKnowledgeFts, 4.0, 1.0) AS score
-    FROM ChatKnowledgeFts
-    WHERE ChatKnowledgeFts MATCH ${matchExpression}
-    ORDER BY score
-    LIMIT 5
-  `;
-
-  if (matches.length === 0) return [];
+  const uniqueTokens = [...new Set(tokens)];
+  const matches = useSqliteFts
+    ? await searchSqliteFts(uniqueTokens)
+    : await searchPostgresDocuments(uniqueTokens);
   const byId = new Map(documents.map((document) => [document.id, document]));
   return matches
     .map((match) => byId.get(match.id))
@@ -40,12 +29,51 @@ export async function searchSiteContent(question: string): Promise<ChatSource[]>
     .map(({ title, body, url }) => ({ title, body, url }));
 }
 
+async function searchSqliteFts(tokens: string[]) {
+  await prisma.$executeRawUnsafe(
+    "CREATE VIRTUAL TABLE IF NOT EXISTS ChatKnowledgeFts USING fts5(id UNINDEXED, title, body, url UNINDEXED, tokenize='unicode61 remove_diacritics 2')"
+  );
+  const matchExpression = tokens
+    .map((token) => `"${token.replace(/"/g, '""')}"`)
+    .join(" OR ");
+  return prisma.$queryRaw<Array<{ id: string; score: number }>>`
+    SELECT id, bm25(ChatKnowledgeFts, 4.0, 1.0) AS score
+    FROM ChatKnowledgeFts
+    WHERE ChatKnowledgeFts MATCH ${matchExpression}
+    ORDER BY score
+    LIMIT 5
+  `;
+}
+
+async function searchPostgresDocuments(tokens: string[]) {
+  const documents = await prisma.chatSearchDocument.findMany({
+    select: { id: true, title: true, body: true }
+  });
+  return documents
+    .map((document) => {
+      const title = document.title.toLocaleLowerCase("az");
+      const body = document.body.toLocaleLowerCase("az");
+      const score = tokens.reduce(
+        (total, token) =>
+          total +
+          (title.includes(token) ? 4 : 0) +
+          Math.min(3, countMatches(body, token)),
+        0
+      );
+      return { id: document.id, score };
+    })
+    .filter((document) => document.score > 0)
+    .sort((first, second) => second.score - first.score)
+    .slice(0, 5);
+}
+
 async function collectDocuments(): Promise<SearchDocument[]> {
-  const [contentItems, questions, events, agentPages] = await Promise.all([
+  const [contentItems, questions, events, agentPages, specialties] = await Promise.all([
     prisma.contentItem.findMany(),
     prisma.question.findMany({ where: { status: "APPROVED" } }),
     prisma.examEvent.findMany(),
-    prisma.agentPage.findMany({ where: { noindex: false } })
+    prisma.agentPage.findMany({ where: { noindex: false } }),
+    prisma.universitySpecialty.findMany({ where: { published: true } })
   ]);
 
   const documents: SearchDocument[] = [];
@@ -102,10 +130,30 @@ async function collectDocuments(): Promise<SearchDocument[]> {
     ].filter(Boolean).join("\n");
     documents.push(createDocument(`agent-page:${page.slug}`, page.title, body, path));
   }
+  for (const specialty of specialties) {
+    const body = [
+      `Universitet: ${specialty.universityName}`,
+      `İxtisas: ${specialty.specialtyName}`,
+      `Şəhər: ${specialty.city}`,
+      `Qəbul qrupu: ${specialty.admissionGroup}`,
+      `Təhsil növü: ${specialty.tuitionType === "FREE" ? "Dövlət sifarişli" : "Ödənişli"}`,
+      `Qəbul ili: ${specialty.academicYear}`,
+      `Keçid balı: ${specialty.minimumAdmissionScore ?? "dərc edilməyib"}`,
+      `İllik təhsil haqqı: ${specialty.annualTuition ?? "dərc edilməyib"}`
+    ].join("\n");
+    documents.push(
+      createDocument(
+        `specialty:${specialty.id}`,
+        `${specialty.universityName} — ${specialty.specialtyName}`,
+        body,
+        "/universitet-ixtisas"
+      )
+    );
+  }
   return documents;
 }
 
-async function syncIndex(documents: SearchDocument[]) {
+async function syncIndex(documents: SearchDocument[], useSqliteFts: boolean) {
   const liveIds = documents.map((document) => document.id);
 
   await prisma.$transaction(async (transaction) => {
@@ -121,11 +169,13 @@ async function syncIndex(documents: SearchDocument[]) {
         create: document,
         update: document
       });
-      await transaction.$executeRaw`DELETE FROM ChatKnowledgeFts WHERE id = ${document.id}`;
-      await transaction.$executeRaw`
-        INSERT INTO ChatKnowledgeFts (id, title, body, url)
-        VALUES (${document.id}, ${document.title}, ${document.body}, ${document.url})
-      `;
+      if (useSqliteFts) {
+        await transaction.$executeRaw`DELETE FROM ChatKnowledgeFts WHERE id = ${document.id}`;
+        await transaction.$executeRaw`
+          INSERT INTO ChatKnowledgeFts (id, title, body, url)
+          VALUES (${document.id}, ${document.title}, ${document.body}, ${document.url})
+        `;
+      }
     }
 
     const staleIds = indexed
@@ -133,11 +183,31 @@ async function syncIndex(documents: SearchDocument[]) {
       .map((document) => document.id);
     if (staleIds.length > 0) {
       await transaction.chatSearchDocument.deleteMany({ where: { id: { in: staleIds } } });
-      for (const id of staleIds) {
-        await transaction.$executeRaw`DELETE FROM ChatKnowledgeFts WHERE id = ${id}`;
+      if (useSqliteFts) {
+        for (const id of staleIds) {
+          await transaction.$executeRaw`DELETE FROM ChatKnowledgeFts WHERE id = ${id}`;
+        }
       }
     }
   });
+}
+
+function getDatabaseProvider(): "sqlite" | "postgresql" {
+  const provider = process.env.DATABASE_PROVIDER;
+  if (provider === "sqlite" || provider === "postgresql") return provider;
+  return process.env.DATABASE_URL?.startsWith("file:") ? "sqlite" : "postgresql";
+}
+
+function countMatches(text: string, token: string) {
+  let count = 0;
+  let fromIndex = 0;
+  while (count < 3) {
+    const index = text.indexOf(token, fromIndex);
+    if (index < 0) break;
+    count += 1;
+    fromIndex = index + token.length;
+  }
+  return count;
 }
 
 function createDocument(id: string, title: string, body: string, url: string): SearchDocument {

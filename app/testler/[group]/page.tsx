@@ -5,6 +5,7 @@ import { questionGroups, type QuestionGroupSlug } from "@/lib/question-schema";
 import { prisma } from "@/lib/prisma";
 import { QuestionSet } from "./question-set";
 import { z } from "zod";
+import { AdSlot } from "@/app/ad-slot";
 
 type PageProps = { params: Promise<{ group: string }> };
 
@@ -92,6 +93,8 @@ export default async function QuestionGroupPage({ params }: PageProps) {
           brauzerdə saxlanılır; qeydiyyat tələb olunmur.
         </p>
       </header>
+
+      <AdSlot format="rectangle" className="mb-8" />
 
       {questions.length === 0 ? (
         <p className="rounded-xl border border-slate-200 bg-white p-6">

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 
 export function AgentPageContent({
   title,
@@ -40,8 +41,8 @@ export function AgentPageContent({
           {paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
         </div>
         <nav aria-label="Əlaqəli səhifələr" className="mt-8 flex flex-wrap gap-4 text-sm font-medium">
-          <a className="text-blue-700 underline" href="/imtahan-teqvimi">İmtahan təqvimi</a>
-          <a className="text-blue-700 underline" href="/">Ana səhifə</a>
+          <Link className="text-blue-700 underline" href="/imtahan-teqvimi">İmtahan təqvimi</Link>
+          <Link className="text-blue-700 underline" href="/">Ana səhifə</Link>
         </nav>
         <p className="mt-8 break-all text-sm">
           Mənbə:{" "}

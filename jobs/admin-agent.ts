@@ -4,7 +4,6 @@ import {
   generateGroqStructuredData,
   GroqBudgetError
 } from "@/lib/ai";
-import { agentPagePayloadSchema } from "@/lib/agent-page-schema";
 import { prisma } from "@/lib/prisma";
 import { toInputJsonValue } from "@/lib/prisma-json";
 
@@ -398,7 +397,7 @@ async function publishOrQueue(
   now: Date
 ) {
   const currentPage = await prisma.agentPage.findUnique({ where: { slug: page.slug } });
-  const decision = await prisma.opportunity.findUniqueOrThrow({ where: { id: opportunity.id } });
+  await prisma.opportunity.findUniqueOrThrow({ where: { id: opportunity.id } });
   const reserveWindow = await prisma.$transaction(async (transaction) => {
     const activePolicy = await transaction.publishPolicy.findUniqueOrThrow({
       where: { id: POLICY_ID }

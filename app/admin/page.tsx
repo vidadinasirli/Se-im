@@ -6,10 +6,21 @@ import {
   rollbackAgentPage,
   setAgentPageIndexing
 } from "@/app/admin/actions";
+import {
+  importSpecialtiesAction,
+  publishSpecialtyAction,
+  rejectSpecialtyAction
+} from "@/app/admin/specialty-actions";
+import {
+  approveAndSendNewsletterAction,
+  createNewsletterDraftAction,
+  rejectNewsletterDraftAction
+} from "@/app/newsletter/actions";
 import { AgentControlPanel } from "@/app/admin/agent-control-panel";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 export const metadata: Metadata = {
   title: "Dəyişikliklərə baxış",
@@ -23,7 +34,15 @@ function formatValue(value: unknown) {
 }
 
 export default async function AdminPage() {
-  const [changes, questionDrafts, contentGaps, agentPages] = await Promise.all([
+  const [
+    changes,
+    questionDrafts,
+    contentGaps,
+    agentPages,
+    newsletterDrafts,
+    confirmedSubscribers,
+    specialtyDrafts
+  ] = await Promise.all([
     prisma.pendingChange.findMany({
       where: { status: "PENDING" },
       orderBy: { createdAt: "asc" }
@@ -41,8 +60,31 @@ export default async function AdminPage() {
     prisma.agentPage.findMany({
       orderBy: { updatedAt: "desc" },
       take: 50
+    }),
+    prisma.newsletterDraft.findMany({
+      where: { status: { in: ["PENDING_REVIEW", "APPROVED"] } },
+      orderBy: { createdAt: "desc" },
+      take: 20
+    }),
+    prisma.newsletterSubscriber.count({ where: { status: "CONFIRMED" } }),
+    prisma.universitySpecialty.findMany({
+      where: { published: false },
+      orderBy: [{ academicYear: "desc" }, { universityName: "asc" }],
+      take: 100
     })
   ]);
+  const newsletterDeliveryCounts = await prisma.newsletterDelivery.groupBy({
+    by: ["draftId", "status"],
+    where: { draftId: { in: newsletterDrafts.map((draft) => draft.id) } },
+    _count: { _all: true }
+  });
+  const deliveryCountByDraft = new Map<string, Record<string, number>>();
+  for (const item of newsletterDeliveryCounts) {
+    deliveryCountByDraft.set(item.draftId, {
+      ...(deliveryCountByDraft.get(item.draftId) ?? {}),
+      [item.status]: item._count._all
+    });
+  }
   const agentRevisions = await prisma.agentPageRevision.findMany({
     where: { pageSlug: { in: agentPages.map((page) => page.slug) } },
     orderBy: [{ pageSlug: "asc" }, { version: "desc" }]
@@ -69,6 +111,169 @@ export default async function AdminPage() {
       </header>
 
       <AgentControlPanel />
+
+      <section className="mb-10 rounded-xl border border-slate-300 bg-white p-5">
+        <h2 className="text-2xl font-bold">DİM ixtisas məlumatlarının idxalı</h2>
+        <p className="mt-2 max-w-3xl leading-7 text-slate-700">
+          Yalnız DİM-in rəsmi HTTPS ünvanından alınmış CSV faylı idxal edilir. Sətirlər ictimai
+          kataloqa dərhal çıxmır; hər birini yoxlayıb ayrıca dərc etməlisiniz.
+        </p>
+        <a
+          href="/ixtisas-sablonu.csv"
+          download
+          className="mt-3 inline-block font-semibold text-blue-800 underline underline-offset-2"
+        >
+          CSV sütun şablonunu endir
+        </a>
+        <form action={importSpecialtiesAction} className="mt-4 grid gap-4 sm:max-w-2xl">
+          <div>
+            <label htmlFor="specialty-source-url" className="mb-2 block text-sm font-semibold">
+              DİM sənədinin rəsmi URL-i
+            </label>
+            <input
+              id="specialty-source-url"
+              name="sourceUrl"
+              type="url"
+              required
+              pattern="https://([a-z0-9-]+\\.)*dim\\.gov\\.az/.*"
+              placeholder="https://dim.gov.az/..."
+              className="min-h-11 w-full rounded-lg border border-slate-300 px-3 py-2"
+            />
+          </div>
+          <div>
+            <label htmlFor="specialty-csv" className="mb-2 block text-sm font-semibold">
+              Rəsmi məlumatdan hazırlanmış CSV
+            </label>
+            <input
+              id="specialty-csv"
+              name="file"
+              type="file"
+              accept=".csv,text/csv"
+              required
+              className="block min-h-11 w-full rounded-lg border border-slate-300 p-2"
+            />
+          </div>
+          <button className="min-h-11 w-fit rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white">
+            Qaralama kimi idxal et
+          </button>
+        </form>
+
+        <h3 className="mt-7 text-lg font-semibold">
+          Yoxlanış gözləyir: {specialtyDrafts.length} qeyd
+        </h3>
+        {specialtyDrafts.length === 0 ? (
+          <p className="mt-2 text-slate-600">Dərc olunmamış ixtisas qeydi yoxdur.</p>
+        ) : (
+          <ul className="mt-4 space-y-3">
+            {specialtyDrafts.map((program) => (
+              <li key={program.id} className="rounded-lg border border-slate-200 p-4">
+                <p className="text-sm text-slate-600">
+                  {program.academicYear} · {program.admissionGroup} qəbul qrupu ·{" "}
+                  {program.tuitionType === "FREE" ? "Dövlət sifarişli" : "Ödənişli"}
+                </p>
+                <h4 className="mt-1 font-semibold">{program.specialtyName}</h4>
+                <p className="text-slate-700">{program.universityName} · {program.city}</p>
+                <p className="mt-2 text-sm">
+                  Keçid balı: {program.minimumAdmissionScore ?? "yoxdur"} · İllik təhsil haqqı:{" "}
+                  {program.annualTuition === null ? "yoxdur" : `${program.annualTuition} AZN`}
+                </p>
+                <p className="mt-2 break-all text-xs text-slate-600">Mənbə: {program.sourceUrl}</p>
+                <div className="mt-3 flex flex-wrap gap-3">
+                  <form action={publishSpecialtyAction}>
+                    <input type="hidden" name="id" value={program.id} />
+                    <button className="min-h-10 rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white">
+                      Yoxladım, dərc et
+                    </button>
+                  </form>
+                  <form action={rejectSpecialtyAction}>
+                    <input type="hidden" name="id" value={program.id} />
+                    <button className="min-h-10 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold">
+                      Rədd et
+                    </button>
+                  </form>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="mb-10 rounded-xl border border-slate-300 bg-white p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-bold">Həftəlik e-poçt bülleteni</h2>
+            <p className="mt-2 text-slate-700">
+              Təsdiqlənmiş abunəçi: {confirmedSubscribers}. Qaralama yayımlanmadan əvvəl yoxlanmalıdır.
+            </p>
+          </div>
+          <form action={createNewsletterDraftAction}>
+            <button className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 font-semibold hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700">
+              Bu həftə üçün qaralama yarat
+            </button>
+          </form>
+        </div>
+        {newsletterDrafts.length === 0 ? (
+          <p className="mt-5 rounded-lg bg-slate-50 p-4 text-slate-700">
+            Yoxlanış gözləyən həftəlik qaralama yoxdur.
+          </p>
+        ) : (
+          <ul className="mt-5 space-y-4">
+            {newsletterDrafts.map((draft) => {
+              const counts = deliveryCountByDraft.get(draft.id) ?? {};
+              return (
+                <li key={draft.id} className="rounded-lg border border-slate-200 p-4">
+                  <p className="text-sm text-slate-600">
+                    {draft.weekKey} həftəsi ·{" "}
+                    {draft.status === "PENDING_REVIEW" ? "Yoxlanış gözləyir" : "Göndəriş təsdiqlənib"} ·{" "}
+                    {counts.SENT ?? 0} göndərildi · {counts.FAILED ?? 0} xəta
+                  </p>
+                  <h3 className="mt-2 text-lg font-semibold">{draft.subject}</h3>
+                  <p className="mt-1 text-sm text-slate-600">{draft.preview}</p>
+                  <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-4 text-sm leading-6">
+                    {draft.content}
+                  </pre>
+                  {Array.isArray(draft.sources) && (
+                    <ul className="mt-3 space-y-1 text-sm">
+                      {draft.sources.map((rawSource, index) => {
+                        if (!rawSource || typeof rawSource !== "object" || Array.isArray(rawSource)) {
+                          return null;
+                        }
+                        const source = rawSource as { title?: unknown; url?: unknown };
+                        return typeof source.title === "string" && typeof source.url === "string" ? (
+                          <li key={`${draft.id}-${index}`}>
+                            Mənbə:{" "}
+                            <a className="text-blue-800 underline" href={source.url}>
+                              {source.title}
+                            </a>
+                          </li>
+                        ) : null;
+                      })}
+                    </ul>
+                  )}
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <form action={approveAndSendNewsletterAction}>
+                      <input type="hidden" name="draftId" value={draft.id} />
+                      <button className="min-h-11 rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700">
+                        {draft.status === "APPROVED"
+                          ? "Göndərişləri davam et"
+                          : "Yoxladım, təsdiqlə və göndər"}
+                      </button>
+                    </form>
+                    {draft.status === "PENDING_REVIEW" && (
+                      <form action={rejectNewsletterDraftAction}>
+                        <input type="hidden" name="draftId" value={draft.id} />
+                        <button className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 font-semibold hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-700">
+                          Rədd et
+                        </button>
+                      </form>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
 
       <section className="mb-10 rounded-xl border border-slate-300 bg-white p-5">
         <h2 className="text-2xl font-bold">Agent səhifələrinin versiyaları</h2>

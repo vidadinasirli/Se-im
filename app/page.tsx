@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Countdown } from "@/app/imtahan-teqvimi/countdown";
+import { AdSlot } from "@/app/ad-slot";
 import { questionGroups } from "@/lib/question-schema";
 import { prisma } from "@/lib/prisma";
 
@@ -54,6 +55,10 @@ export default async function HomePage() {
           <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-medium text-blue-800">
             <Link href="/imtahan-teqvimi">İmtahan təqvimi</Link>
             <Link href={testUrl}>Riyaziyyat testləri</Link>
+            <Link href="/universitet-ixtisas">Universitet və ixtisaslar</Link>
+            <Link href="/bal-hesabla">Bal simulyatoru</Link>
+            <Link href="/hazirliq-plani">Hazırlıq planı</Link>
+            <Link href="/heftelik-plan">Həftəlik plan</Link>
             {currencyPage && <Link href="/valyuta/azn-try-cevirici">AZN/TRY çeviricisi</Link>}
           </div>
         </nav>
@@ -111,6 +116,10 @@ export default async function HomePage() {
         </aside>
       </section>
 
+      <div className="mx-auto max-w-6xl px-4 pb-8 sm:px-6">
+        <AdSlot />
+      </div>
+
       <section className="mx-auto grid max-w-6xl gap-4 px-4 pb-16 sm:px-6 md:grid-cols-2">
         <Link
           href="/imtahan-teqvimi"
@@ -128,6 +137,43 @@ export default async function HomePage() {
           <h2 className="text-xl font-semibold">Riyaziyyat testləri</h2>
           <p className="mt-2 leading-7 text-slate-600">
             9-cu sinif Cəbr sualları, ani nəticə və mövzular üzrə irəliləyiş.
+          </p>
+        </Link>
+        <Link
+          href="/universitet-ixtisas"
+          className="rounded-xl border border-slate-200 bg-white p-6 hover:border-blue-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
+        >
+          <h2 className="text-xl font-semibold">Universitet və ixtisaslar</h2>
+          <p className="mt-2 leading-7 text-slate-600">
+            İxtisasları şəhərə, qəbul qrupuna və dövlət sifarişli və ya ödənişli təhsil növünə görə
+            axtarın.
+          </p>
+        </Link>
+        <Link
+          href="/bal-hesabla"
+          className="rounded-xl border border-slate-200 bg-white p-6 hover:border-blue-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
+        >
+          <h2 className="text-xl font-semibold">Balına uyğun ixtisaslar</h2>
+          <p className="mt-2 leading-7 text-slate-600">
+            DİM balını əvvəlki ilin rəsmi keçid balları ilə müqayisə et.
+          </p>
+        </Link>
+        <Link
+          href="/hazirliq-plani"
+          className="rounded-xl border border-slate-200 bg-white p-6 hover:border-blue-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
+        >
+          <h2 className="text-xl font-semibold">30/60/90 günlük plan</h2>
+          <p className="mt-2 leading-7 text-slate-600">
+            Fənnini və həftəlik dərs günlərini seç, irəliləyişini qeyd et.
+          </p>
+        </Link>
+        <Link
+          href="/heftelik-plan"
+          className="rounded-xl border border-slate-200 bg-white p-6 hover:border-blue-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
+        >
+          <h2 className="text-xl font-semibold">Həftənin planı</h2>
+          <p className="mt-2 leading-7 text-slate-600">
+            Həftəlik hazırlıq bülleteninə razılıqla abunə ol.
           </p>
         </Link>
         {currencyPage && (
